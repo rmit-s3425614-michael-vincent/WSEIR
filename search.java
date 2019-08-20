@@ -10,8 +10,9 @@ import util.stemmer;
 
 public class search {
 
-	private static Map<Integer, String> docMap = new Hashtable<>();
-	private static Map<String, pointer> lexicon = new Hashtable<>(5000);
+	// uses java library for data structure
+	private static Map<Integer, String> docMap = new Hashtable<>(175870);
+	private static Map<String, pointer> lexicon = new Hashtable<>(353910);
 	private static List<String> querylist = new ArrayList<>();
 
 	public static void main(String[] args) {
@@ -45,6 +46,7 @@ public class search {
 				querylist.add(args[i]);
 			}
 			
+			// minimum of 1 query term is needed
 			if (!querylist.isEmpty()) {
 				
 				// parse through list for query

@@ -3,6 +3,8 @@ package util;
 import java.util.Map;
 import java.util.HashMap;
 
+// helper class to store frequency of documents containing lexicon
+// also store offset for pointer to invlists
 public class pointer {
 	
 	private int docsFreq;

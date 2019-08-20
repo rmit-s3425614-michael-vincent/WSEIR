@@ -26,9 +26,10 @@ import util.stemmer;
 
 public class index {
 
+	// uses java library for data structure
 	private static Set<String> printList = new HashSet<>();
-	private static Map<Integer, String> docMap = new Hashtable<>();
-	private static Map<String, pointer> lexicon = new Hashtable<>(5000);
+	private static Map<Integer, String> docMap = new Hashtable<>(175870);
+	private static Map<String, pointer> lexicon = new Hashtable<>(353910);
 	private static Set<String> stopwords = new HashSet<>();
 
 	public static void main(String[] args) {
@@ -75,10 +76,15 @@ public class index {
 
 			try {
 
+				// build collections of elements from documents
+				// elements are enclosed within DOC tags
 				File input = new File(inputDoclist);
 				Document latimes = Jsoup.parse(input, "UTF-8");
 				Elements docs = latimes.getElementsByTag("DOC");
 
+				// iterate through elements collections
+				// get all elements enclosed within DOCNO, DOCID, HEADLINE, TEXT tags
+				// make mapping of elements and insert to hashtables
 				for (Element doc : docs) {
 					Elements docno = doc.getElementsByTag("DOCNO");
 					String no = docno.text();
@@ -139,17 +145,17 @@ public class index {
 				System.err.println("Cannot open file " + inputDoclist);
 			}
 
-			// create mapping of document no and id
+			// create text file "map" to store mapping of document no and id
+			File mapFile = new File("./map");
+			mapFile.createNewFile();
+			PrintWriter mapOut = new PrintWriter(mapFile);
+			
+			// write document no and id to map file
 			StringJoiner map = new StringJoiner("\n");
 			for (Integer id : docMap.keySet()) {
 				String out = docMap.get(id) + "::" + id;
 				map.add(out);
 			}
-
-			// create text file "map" to store mapping of document no and id
-			File mapFile = new File("./map");
-			mapFile.createNewFile();
-			PrintWriter mapOut = new PrintWriter(mapFile);
 			mapOut.write(map.toString());
 			mapOut.close();
 			
@@ -161,6 +167,7 @@ public class index {
 			// create binary file "invlists" to store the inverted list
 			DataOutputStream invlists = new DataOutputStream(new FileOutputStream("./invlists"));
 			
+			// write lexicon and invlists to files
 			StringJoiner lx = new StringJoiner("\n");
 			int offset = 0;
 			for (String lex : lexicon.keySet()) {

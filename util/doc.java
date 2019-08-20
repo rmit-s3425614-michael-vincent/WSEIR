@@ -1,9 +1,10 @@
 package util;
 
+// helper class to store lexicon frequency in a document
 public class doc {
 
 	private int freq;
-	
+
 	public doc() {
 		this.freq = 1;
 	}
