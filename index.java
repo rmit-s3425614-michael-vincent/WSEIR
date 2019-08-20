@@ -1,0 +1,200 @@
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Hashtable;
+import java.util.List;
+import java.util.Map;
+import java.util.Scanner;
+import java.util.Set;
+import java.util.StringJoiner;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import util.doc;
+import util.pointer;
+import util.stemmer;
+
+public class index {
+
+	private static Set<String> printList = new HashSet<>();
+	private static Map<Integer, String> docMap = new Hashtable<>();
+	private static Map<String, pointer> lexicon = new Hashtable<>(5000);
+	private static Set<String> stopwords = new HashSet<>();
+
+	public static void main(String[] args) {
+
+		try {
+
+			OptionParser parser = new OptionParser("s:p");
+			OptionSet options = parser.parse(args);
+
+			String inputStoplist = null;
+			String inputDoclist = null;
+
+			// option for specifying stoplist to use
+			if (options.has("s")) {
+				if (options.hasArgument("s")) {
+					inputStoplist = (String) options.valueOf("s");
+				}
+			}
+
+			// non-option arguments
+			List<?> tempArgs = options.nonOptionArguments();
+			List<String> remainArgs = new ArrayList<String>();
+			for (Object object : tempArgs) {
+				remainArgs.add((String) object);
+			}
+
+			inputDoclist = remainArgs.get(0);
+
+			// scan stoplist and make hashset of stop words if provided
+			if (inputStoplist != null) {
+				try {
+
+					File stop = new File(inputStoplist);
+					Scanner read = new Scanner(stop);
+					read.useDelimiter("\\Z");
+					String[] stoplist = read.next().split("[^\\p{L}]+");
+					Collections.addAll(stopwords, stoplist);
+					read.close();
+
+				} catch (FileNotFoundException ex) {
+					System.err.println("File " + inputStoplist + " not found.");
+				}
+			}
+
+			try {
+
+				File input = new File(inputDoclist);
+				Document latimes = Jsoup.parse(input, "UTF-8");
+				Elements docs = latimes.getElementsByTag("DOC");
+
+				for (Element doc : docs) {
+					Elements docno = doc.getElementsByTag("DOCNO");
+					String no = docno.text();
+					Elements docid = doc.getElementsByTag("DOCID");
+					Integer id = Integer.parseInt(docid.text());
+					index.docMap.put(id, no);
+					Elements headline = doc.getElementsByTag("HEADLINE");
+					List<String> hllist = new ArrayList<>(Arrays.asList(
+							headline.text().replaceAll("[^a-zA-Z\\s+]", "").toLowerCase().trim().split("\\s+")));
+					hllist.removeAll(stopwords);
+					printList.addAll(hllist);
+					for (String hl : hllist) {
+						stemmer stem = new stemmer();
+						char[] ch = hl.toCharArray();
+						stem.add(ch, ch.length);
+						stem.stem();
+						hl = stem.toString();
+						if (lexicon.containsKey(hl)) {
+							if (lexicon.get(hl).getInvIndex().containsKey(id)) {
+								lexicon.get(hl).getInvIndex().get(id).incFreq();
+							} else {
+								lexicon.get(hl).getInvIndex().put(id, new doc());
+								lexicon.get(hl).incDocsFreq();
+							}
+						} else {
+							pointer lx = new pointer();
+							lx.getInvIndex().put(id, new doc());
+							lexicon.put(hl, lx);
+						}
+					}
+					Elements text = doc.getElementsByTag("TEXT");
+					List<String> txtlist = new ArrayList<>(Arrays
+							.asList(text.text().replaceAll("[^a-zA-Z\\s+]", "").toLowerCase().trim().split("\\s+")));
+					txtlist.removeAll(stopwords);
+					printList.addAll(txtlist);
+					for (String txt : txtlist) {
+						stemmer stem = new stemmer();
+						char[] ch = txt.toCharArray();
+						stem.add(ch, ch.length);
+						stem.stem();
+						txt = stem.toString();
+						if (lexicon.containsKey(txt)) {
+							if (lexicon.get(txt).getInvIndex().containsKey(id)) {
+								lexicon.get(txt).getInvIndex().get(id).incFreq();
+							} else {
+								lexicon.get(txt).getInvIndex().put(id, new doc());
+								lexicon.get(txt).incDocsFreq();
+							}
+						} else {
+							pointer lx = new pointer();
+							lx.getInvIndex().put(id, new doc());
+							lexicon.put(txt, lx);
+						}
+					}
+				}
+
+			} catch (IOException ex) {
+				System.err.println("Cannot open file " + inputDoclist);
+			}
+
+			// create mapping of document no and id
+			StringJoiner map = new StringJoiner("\n");
+			for (Integer id : docMap.keySet()) {
+				String out = docMap.get(id) + "::" + id;
+				map.add(out);
+			}
+
+			// create text file "map" to store mapping of document no and id
+			File mapFile = new File("./map");
+			mapFile.createNewFile();
+			PrintWriter mapOut = new PrintWriter(mapFile);
+			mapOut.write(map.toString());
+			mapOut.close();
+			
+			// create text file "lexicon" to store lexicon and pointer
+			File lexFile = new File("./lexicon");
+			lexFile.createNewFile();
+			PrintWriter lexOut = new PrintWriter(lexFile);
+			
+			// create binary file "invlists" to store the inverted list
+			DataOutputStream invlists = new DataOutputStream(new FileOutputStream("./invlists"));
+			
+			StringJoiner lx = new StringJoiner("\n");
+			int offset = 0;
+			for (String lex : lexicon.keySet()) {
+				lexicon.get(lex).setOffset(offset);
+				String out = lex + "::" + lexicon.get(lex).getDocsFreq() + "::" + lexicon.get(lex).getOffset();
+				for (Integer doc : lexicon.get(lex).getInvIndex().keySet()) {
+					int freq = lexicon.get(lex).getInvIndex().get(doc).getFreq();
+					invlists.writeInt(doc);
+					invlists.writeInt(freq);
+				}
+				offset += lexicon.get(lex).getDocsFreq() * 8;
+				lx.add(out);
+			}
+			
+			lexOut.write(lx.toString());
+			lexOut.close();
+			
+			invlists.flush();
+			invlists.close();
+
+			// print the lexicon to standard output if -p is given
+			if (options.has("p")) {
+				for (String out : printList) {
+					System.out.println(out);
+				}
+			} else {
+
+			}
+
+		} catch (Exception ex) {
+			ex.printStackTrace();
+			System.err.println("Usage is: index [-s <stoplist pathfile>] [-p] <document pathfile>");
+		}
+
+	}
+
+}
