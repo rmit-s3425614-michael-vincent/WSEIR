@@ -1,7 +1,7 @@
 package util;
 
 import java.util.Map;
-import java.util.HashMap;
+import java.util.Hashtable;
 
 // helper class to store frequency of documents containing lexicon
 // also store offset for pointer to invlists
@@ -14,7 +14,7 @@ public class pointer {
 	public pointer() {
 		this.docsFreq = 1;
 		this.offset = 0;
-		this.invIndex = new HashMap<>();
+		this.invIndex = new Hashtable<>(2000);
 	}
 
 	public int getDocsFreq() {
