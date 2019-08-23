@@ -14,7 +14,7 @@ public class pointer {
 	public pointer() {
 		this.docsFreq = 1;
 		this.offset = 0;
-		this.invIndex = new Hashtable<>(2000);
+		this.invIndex = new Hashtable<>(2500);
 	}
 
 	public int getDocsFreq() {

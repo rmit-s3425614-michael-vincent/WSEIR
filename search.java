@@ -11,8 +11,8 @@ import util.stemmer;
 public class search {
 
 	// uses java library for data structure
-	private static Map<Integer, String> docMap = new Hashtable<>(175870);
-	private static Map<String, pointer> lexicon = new Hashtable<>(353910);
+	private static Map<Integer, String> docMap = new Hashtable<>(180000);
+	private static Map<String, pointer> lexicon = new Hashtable<>(230000);
 	private static List<String> querylist = new ArrayList<>();
 
 	public static void main(String[] args) {
@@ -54,7 +54,7 @@ public class search {
 				// use stemmer to tokenise query words
 				for (String query : querylist) {
 					
-					String token = query.replaceAll("[^a-zA-Z\\s+]", "").toLowerCase().trim();
+					String token = query.replaceAll("[^a-zA-Z\\s]", " ").toLowerCase().trim();
 					stemmer stem = new stemmer();
 					char[] ch = token.toCharArray();
 					stem.add(ch, ch.length);
@@ -98,8 +98,8 @@ public class search {
 			}
 			
 		} catch (Exception ex) {
-			ex.printStackTrace();
-			System.err.println("Usage is: search <lexicon> <invlists> <map> <queryterm_1>[... <queryterm_N>]");
+			System.out.println(ex);
+			System.err.println("Usage is: search <lexicon filepath> <invlists filepath> <map filepath> <queryterm_1>[... <queryterm_N>]");
 		}
 
 	}

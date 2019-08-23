@@ -28,8 +28,8 @@ public class index {
 
 	// uses java library for data structure
 	private static Set<String> printList = new HashSet<>();
-	private static Map<Integer, String> docMap = new Hashtable<>(175870);
-	private static Map<String, pointer> lexicon = new Hashtable<>(353910);
+	private static Map<Integer, String> docMap = new Hashtable<>(180000);
+	private static Map<String, pointer> lexicon = new Hashtable<>(230000);
 	private static Set<String> stopwords = new HashSet<>();
 
 	public static void main(String[] args) {
@@ -93,7 +93,7 @@ public class index {
 					index.docMap.put(id, no);
 					Elements headline = doc.getElementsByTag("HEADLINE");
 					List<String> hllist = new ArrayList<>(Arrays.asList(
-							headline.text().replaceAll("[^a-zA-Z\\s+]", "").toLowerCase().trim().split("\\s+")));
+							headline.text().replaceAll("[^a-zA-Z\\s]", " ").toLowerCase().trim().split("\\s+")));
 					hllist.removeAll(stopwords);
 					printList.addAll(hllist);
 					for (String hl : hllist) {
@@ -117,7 +117,7 @@ public class index {
 					}
 					Elements text = doc.getElementsByTag("TEXT");
 					List<String> txtlist = new ArrayList<>(Arrays
-							.asList(text.text().replaceAll("[^a-zA-Z\\s+]", "").toLowerCase().trim().split("\\s+")));
+							.asList(text.text().replaceAll("[^a-zA-Z\\s]", " ").toLowerCase().trim().split("\\s+")));
 					txtlist.removeAll(stopwords);
 					printList.addAll(txtlist);
 					for (String txt : txtlist) {
@@ -198,8 +198,8 @@ public class index {
 			}
 
 		} catch (Exception ex) {
-			ex.printStackTrace();
-			System.err.println("Usage is: index [-s <stoplist pathfile>] [-p] <document pathfile>");
+			System.out.println(ex);
+			System.err.println("Usage is: index [-s <stoplist filepath>] [-p] <document filepath>");
 		}
 
 	}
