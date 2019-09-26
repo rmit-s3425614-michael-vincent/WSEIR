@@ -26,6 +26,8 @@ import util.stemmer;
 
 public class index {
 
+	private static final String USAGE = "Usage is: index [-s <stoplist>] [-p] <document>";
+
 	// uses java library for data structure
 	private static Set<String> printList = new HashSet<>();
 	private static Map<Integer, String> docMap = new Hashtable<>(180000);
@@ -71,6 +73,7 @@ public class index {
 
 				} catch (FileNotFoundException ex) {
 					System.err.println("File " + inputStoplist + " not found.");
+					System.err.println(USAGE);
 				}
 			}
 
@@ -143,6 +146,7 @@ public class index {
 
 			} catch (IOException ex) {
 				System.err.println("Cannot open file " + inputDoclist);
+				System.err.println(USAGE);
 			}
 
 			// create text file "map" to store mapping of document no and id
@@ -193,13 +197,11 @@ public class index {
 				for (String out : printList) {
 					System.out.println(out);
 				}
-			} else {
-
 			}
 
 		} catch (Exception ex) {
-			System.out.println(ex);
-			System.err.println("Usage is: index [-s <stoplist filepath>] [-p] <document filepath>");
+			System.err.println(ex);
+			System.err.println(USAGE);
 		}
 
 	}
