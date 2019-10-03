@@ -1,20 +1,29 @@
 package util;
 
-// helper class to store lexicon frequency in a document
 public class doc {
 
-	private int freq;
+	private String docNo;
+	private int docLength;
 
-	public doc() {
-		this.freq = 1;
+	public doc(String docNo, int docLength) {
+		this.docNo = docNo;
+		this.docLength = docLength;
 	}
 
-	public int getFreq() {
-		return freq;
+	public String getDocNo() {
+		return docNo;
 	}
 
-	public void incFreq() {
-		this.freq++;
+	public void setDocNo(String docNo) {
+		this.docNo = docNo;
+	}
+
+	public int getDocLength() {
+		return docLength;
+	}
+	
+	public void setDocLength(int docLength) {
+		this.docLength = docLength;
 	}
 
 }

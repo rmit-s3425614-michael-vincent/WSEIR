@@ -21,6 +21,7 @@ import org.jsoup.select.Elements;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import util.doc;
+import util.frequency;
 import util.pointer;
 import util.stemmer;
 
@@ -30,7 +31,7 @@ public class index {
 
 	// uses java library for data structure
 	private static Set<String> printList = new HashSet<>();
-	private static Map<Integer, String> docMap = new Hashtable<>(180000);
+	private static Map<Integer, doc> docMap = new Hashtable<>(180000);
 	private static Map<String, pointer> lexicon = new Hashtable<>(230000);
 	private static Set<String> stopwords = new HashSet<>();
 
@@ -76,7 +77,7 @@ public class index {
 					System.err.println(USAGE);
 				}
 			}
-
+						
 			try {
 
 				// build collections of elements from documents
@@ -89,16 +90,28 @@ public class index {
 				// get all elements enclosed within DOCNO, DOCID, HEADLINE, TEXT tags
 				// make mapping of elements and insert to hashtables
 				for (Element doc : docs) {
+					
 					Elements docno = doc.getElementsByTag("DOCNO");
 					String no = docno.text();
 					Elements docid = doc.getElementsByTag("DOCID");
 					Integer id = Integer.parseInt(docid.text());
-					index.docMap.put(id, no);
+					index.docMap.put(id, new doc(no, 0));
+					
 					Elements headline = doc.getElementsByTag("HEADLINE");
 					List<String> hllist = new ArrayList<>(Arrays.asList(
 							headline.text().replaceAll("[^a-zA-Z\\s]", " ").toLowerCase().trim().split("\\s+")));
+					
+					Elements text = doc.getElementsByTag("TEXT");
+					List<String> txtlist = new ArrayList<>(Arrays
+							.asList(text.text().replaceAll("[^a-zA-Z\\s]", " ").toLowerCase().trim().split("\\s+")));
+							
+					docMap.get(id).setDocLength(hllist.size() + txtlist.size());
+					
 					hllist.removeAll(stopwords);
+					txtlist.removeAll(stopwords);
 					printList.addAll(hllist);
+					printList.addAll(txtlist);
+					
 					for (String hl : hllist) {
 						stemmer stem = new stemmer();
 						char[] ch = hl.toCharArray();
@@ -106,23 +119,20 @@ public class index {
 						stem.stem();
 						hl = stem.toString();
 						if (lexicon.containsKey(hl)) {
+							lexicon.get(hl).incTotalFreq();
 							if (lexicon.get(hl).getInvIndex().containsKey(id)) {
 								lexicon.get(hl).getInvIndex().get(id).incFreq();
 							} else {
-								lexicon.get(hl).getInvIndex().put(id, new doc());
+								lexicon.get(hl).getInvIndex().put(id, new frequency());
 								lexicon.get(hl).incDocsFreq();
 							}
 						} else {
 							pointer lx = new pointer();
-							lx.getInvIndex().put(id, new doc());
+							lx.getInvIndex().put(id, new frequency());
 							lexicon.put(hl, lx);
 						}
 					}
-					Elements text = doc.getElementsByTag("TEXT");
-					List<String> txtlist = new ArrayList<>(Arrays
-							.asList(text.text().replaceAll("[^a-zA-Z\\s]", " ").toLowerCase().trim().split("\\s+")));
-					txtlist.removeAll(stopwords);
-					printList.addAll(txtlist);
+					
 					for (String txt : txtlist) {
 						stemmer stem = new stemmer();
 						char[] ch = txt.toCharArray();
@@ -130,25 +140,27 @@ public class index {
 						stem.stem();
 						txt = stem.toString();
 						if (lexicon.containsKey(txt)) {
+							lexicon.get(txt).incTotalFreq();
 							if (lexicon.get(txt).getInvIndex().containsKey(id)) {
 								lexicon.get(txt).getInvIndex().get(id).incFreq();
 							} else {
-								lexicon.get(txt).getInvIndex().put(id, new doc());
+								lexicon.get(txt).getInvIndex().put(id, new frequency());
 								lexicon.get(txt).incDocsFreq();
 							}
 						} else {
 							pointer lx = new pointer();
-							lx.getInvIndex().put(id, new doc());
+							lx.getInvIndex().put(id, new frequency());
 							lexicon.put(txt, lx);
 						}
 					}
+					
 				}
 
 			} catch (IOException ex) {
 				System.err.println("Cannot open file " + inputDoclist);
 				System.err.println(USAGE);
 			}
-
+			
 			// create text file "map" to store mapping of document no and id
 			File mapFile = new File("./map");
 			mapFile.createNewFile();
@@ -157,7 +169,7 @@ public class index {
 			// write document no and id to map file
 			StringJoiner map = new StringJoiner("\n");
 			for (Integer id : docMap.keySet()) {
-				String out = docMap.get(id) + "::" + id;
+				String out = docMap.get(id).getDocNo() + "::" + docMap.get(id).getDocLength() + "::" + id;
 				map.add(out);
 			}
 			mapOut.write(map.toString());
@@ -176,7 +188,8 @@ public class index {
 			int offset = 0;
 			for (String lex : lexicon.keySet()) {
 				lexicon.get(lex).setOffset(offset);
-				String out = lex + "::" + lexicon.get(lex).getDocsFreq() + "::" + lexicon.get(lex).getOffset();
+				String out = lex + "::" + lexicon.get(lex).getTotalFreq() + "::" + lexicon.get(lex).getDocsFreq() + "::"
+						+ lexicon.get(lex).getOffset();
 				for (Integer doc : lexicon.get(lex).getInvIndex().keySet()) {
 					int freq = lexicon.get(lex).getInvIndex().get(doc).getFreq();
 					invlists.writeInt(doc);
