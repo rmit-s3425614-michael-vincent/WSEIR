@@ -3,6 +3,7 @@ import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Iterator;
@@ -17,6 +18,8 @@ import joptsimple.OptionSet;
 import util.doc;
 import util.frequency;
 import util.pointer;
+import util.query;
+import util.BoundedPriorityQueue;
 import util.Stemmer;
 
 public class search {
@@ -231,29 +234,48 @@ public class search {
 						TL += length;
 					}
 					double AL = TL / N;
-					for (Integer fr : queryResults) {
-						int Ld = docMap.get(fr).getDocLength();
+					for (Integer id : queryResults) {
+						int Ld = docMap.get(id).getDocLength();
 						double K = 1.2 * ((1 - 0.75) + ((0.75 * Ld) / AL));
-						docK.put(fr, K);
+						docK.put(id, K);
 					}
 					for (String lexicon : queryLexicon.keySet()) {
 						pointer pointer = queryLexicon.get(lexicon);
 						int ft = pointer.getDocsFreq();
-						for (Integer fr : queryResults) {
-							int fdt = pointer.getInvIndex().get(fr).getFreq();
+						for (Integer id : queryResults) {
+							int fdt = pointer.getInvIndex().get(id).getFreq();
 							Double BM25 = Math.log((N - ft + 0.5) / (ft + 0.5))
-									* (((1.2 + 1) * fdt) / (docK.get(fr) + fdt));
-							accumulator.merge(fr, BM25, Double::sum);
+									* (((1.2 + 1) * fdt) / (docK.get(id) + fdt));
+							accumulator.merge(id, BM25, Double::sum);
 						}
 					}
+					
+					Comparator<query> compare = new Comparator<query>() {
 
-					System.out.println(sj.toString());
-					int count = 1;
-					for (Integer fr : queryResults) {
-						if (count <= inputNumResults) {
-							System.out.println(inputQueryLabel + " " + docMap.get(fr).getDocNo() + " " + count + " "
-									+ accumulator.get(fr));
+						@Override
+						public int compare(query o1, query o2) {
+							if (o1.getWeight() < o2.getWeight())
+								return -1;
+							if (o1.getWeight() > o2.getWeight())
+								return 1;
+							return 0;
 						}
+
+					};
+					
+					BoundedPriorityQueue<query> heap = new BoundedPriorityQueue<query>(compare, inputNumResults);
+					for (Integer id : accumulator.keySet()) {
+						query qr = new query(id, accumulator.get(id));
+						heap.offer(qr);
+					}
+					
+					System.out.println(sj.toString());
+					Iterator<query> itr = heap.iterator();
+					int count = 1;
+					while (itr.hasNext()) {
+						int id = itr.next().getId();
+						System.out.println(inputQueryLabel + " " + docMap.get(id).getDocNo() + " " + count + " "
+								+ accumulator.get(id));
 						count++;
 					}
 
