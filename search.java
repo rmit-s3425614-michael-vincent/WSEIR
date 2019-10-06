@@ -1,35 +1,45 @@
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.StringJoiner;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import util.doc;
+import util.frequency;
 import util.pointer;
-import util.stemmer;
+import util.Stemmer;
 
 public class search {
 
-	private static final String USAGE = "Usage is: search -BM25 -q <query-label> -n <num-results> -l <lexicon> -i <invlists> -m <map> [-s <stoplist>] <queryterm-1> [<queryterm-2>... <queryterm-N>]";
+	private static final String USAGE = "Usage is: search --<retrieval-function-1> [--<retrieval-function-2>] -q <query-label> -n <num-results> -l <lexicon> -i <invlists> -m <map> [-s <stoplist>] <queryterm-1> [<queryterm-2>... <queryterm-N>]";
 
 	// uses java library for data structure
 	private static Map<Integer, doc> docMap = new Hashtable<>(180000);
 	private static Map<String, pointer> lexicon = new Hashtable<>(230000);
 	private static Set<String> stopwords = new HashSet<>();
 	private static List<String> queryList = new ArrayList<>();
+	private static boolean BM25 = false;
+	private static boolean MMR = false;
 
 	public static void main(String[] args) {
 
 		try {
 
+			long startTime = System.nanoTime();
+
 			OptionParser parser = new OptionParser();
 			parser.accepts("BM25");
+			parser.accepts("MMR");
 			parser.accepts("q").withRequiredArg().required().isRequired();
 			parser.accepts("n").withRequiredArg().ofType(Integer.class).required();
 			parser.accepts("l").withRequiredArg().required();
@@ -46,11 +56,13 @@ public class search {
 			String inputMap = null;
 			String inputStoplist = null;
 
-			// option for specifying BM25 to be used
+			// option for specifying retrieval function to be used
 			if (options.has("BM25")) {
-
+				BM25 = true;
+			} else if (options.has("MMR")) {
+				MMR = true;
 			} else {
-				throw new Exception("Missing BM25");
+				throw new Exception("Missing retrieval function to use");
 			}
 
 			// option for specifying query label
@@ -61,6 +73,9 @@ public class search {
 			// option for specifying number of results
 			if (options.hasArgument("n")) {
 				inputNumResults = (Integer) options.valueOf("n");
+				if (inputNumResults <= 0) {
+					throw new Exception("Must have at least 1 results");
+				}
 			}
 
 			// option for specifying lexicon file
@@ -96,11 +111,13 @@ public class search {
 			Scanner lexRead = new Scanner(lexFile);
 			while (lexRead.hasNextLine()) {
 				String[] in = lexRead.nextLine().split("::");
-				pointer pointer = new pointer();
-				pointer.setTotalFreq(Integer.parseInt(in[1]));
-				pointer.setDocsFreq(Integer.parseInt(in[2]));
-				pointer.setOffset(Integer.parseInt(in[3]));
-				lexicon.put(in[0], pointer);
+				lexicon.put(in[0], new pointer() {
+					{
+						setTotalFreq(Integer.parseInt(in[1]));
+						setDocsFreq(Integer.parseInt(in[2]));
+						setOffset(Integer.parseInt(in[3]));
+					}
+				});
 			}
 			lexRead.close();
 
@@ -110,7 +127,7 @@ public class search {
 			while (mapRead.hasNextLine()) {
 				String[] in = mapRead.nextLine().split("::");
 				docMap.put(Integer.parseInt(in[2]), new doc(in[0], Integer.parseInt(in[1])));
-				
+
 			}
 			mapRead.close();
 
@@ -132,14 +149,24 @@ public class search {
 
 				// remove words in stoplist from query
 				queryList.removeAll(stopwords);
-				
+
+				// a local lexicon mapping that contains only query results
+				Map<String, pointer> queryLexicon = new Hashtable<>();
+				List<List<Integer>> finalResults = new ArrayList<List<Integer>>();
+
+				StringJoiner sj = new StringJoiner(" ");
+
 				// parse through list for query
 				// use regex to remove punctuation and markup tags
 				// use stemmer to tokenise query words
 				for (String query : queryList) {
 
+					sj.add(query);
+
+					List<Integer> singleResults = new ArrayList<>();
+
 					String token = query.replaceAll("[^a-zA-Z\\s]", " ").toLowerCase().trim();
-					stemmer stem = new stemmer();
+					Stemmer stem = new Stemmer();
 					char[] ch = token.toCharArray();
 					stem.add(ch, ch.length);
 					stem.stem();
@@ -152,6 +179,13 @@ public class search {
 						int docsFreq = lexicon.get(token).getDocsFreq();
 						int offset = lexicon.get(token).getOffset();
 
+						queryLexicon.put(token, new pointer() {
+							{
+								setTotalFreq(totalFreq);
+								setDocsFreq(docsFreq);
+							}
+						});
+
 						// read "invlists" and jump pointer with seek
 						raf.seek(offset);
 						int[] docList = new int[docsFreq * 2];
@@ -160,12 +194,18 @@ public class search {
 							docList[i] = index;
 						}
 
-						System.out.println(totalFreq + " " +docsFreq);
+						System.out.println(totalFreq + " " + docsFreq);
 						for (int i = 0; i < docList.length; i++) {
 							if ((i % 2) == 0) {
-								String docno = docMap.get(docList[i]).getDocNo();
+								singleResults.add(docList[i]);
 								int freq = docList[i + 1];
-								System.out.println(docno + " " + freq);
+								queryLexicon.get(token).getInvIndex().put(docList[i], new frequency() {
+									{
+										setFreq(freq);
+									}
+								});
+								System.out.println(docMap.get(docList[i]).getDocNo() + " "
+										+ queryLexicon.get(token).getInvIndex().get(docList[i]).getFreq());
 							}
 						}
 
@@ -173,6 +213,49 @@ public class search {
 						System.out.println(0 + " " + 0);
 					}
 					System.out.println();
+
+					finalResults.add(singleResults);
+
+				}
+
+				if (BM25 == true) {
+
+					// map to accumulate weight result
+					Map<Integer, Double> docK = new Hashtable<>();
+					Map<Integer, Double> accumulator = new Hashtable<>();
+					Set<Integer> queryResults = getCommonElements(finalResults);
+					int N = docMap.size();
+					int TL = 0;
+					for (Integer id : docMap.keySet()) {
+						int length = docMap.get(id).getDocLength();
+						TL += length;
+					}
+					double AL = TL / N;
+					for (Integer fr : queryResults) {
+						int Ld = docMap.get(fr).getDocLength();
+						double K = 1.2 * ((1 - 0.75) + ((0.75 * Ld) / AL));
+						docK.put(fr, K);
+					}
+					for (String lexicon : queryLexicon.keySet()) {
+						pointer pointer = queryLexicon.get(lexicon);
+						int ft = pointer.getDocsFreq();
+						for (Integer fr : queryResults) {
+							int fdt = pointer.getInvIndex().get(fr).getFreq();
+							Double BM25 = Math.log((N - ft + 0.5) / (ft + 0.5))
+									* (((1.2 + 1) * fdt) / (docK.get(fr) + fdt));
+							accumulator.merge(fr, BM25, Double::sum);
+						}
+					}
+
+					System.out.println(sj.toString());
+					int count = 1;
+					for (Integer fr : queryResults) {
+						if (count <= inputNumResults) {
+							System.out.println(inputQueryLabel + " " + docMap.get(fr).getDocNo() + " " + count + " "
+									+ accumulator.get(fr));
+						}
+						count++;
+					}
 
 				}
 
@@ -183,11 +266,28 @@ public class search {
 
 			raf.close();
 
+			long endTime = System.nanoTime();
+
+			System.out.print("Time taken = " + ((double) (endTime - startTime)) / Math.pow(10, 6) + " ms");
+
 		} catch (Exception ex) {
 			System.err.println(ex);
 			System.err.println(USAGE);
 		}
 
+	}
+
+	// copied from https://dzone.com/articles/computing-common-and-unique
+	public static <T> Set<T> getCommonElements(Collection<? extends Collection<T>> collections) {
+		Set<T> common = new LinkedHashSet<T>();
+		if (!collections.isEmpty()) {
+			Iterator<? extends Collection<T>> iterator = collections.iterator();
+			common.addAll(iterator.next());
+			while (iterator.hasNext()) {
+				common.retainAll(iterator.next());
+			}
+		}
+		return common;
 	}
 
 }

@@ -16,5 +16,9 @@ public class frequency {
 	public void incFreq() {
 		this.freq++;
 	}
+	
+	public void setFreq(int freq) {
+		this.freq = freq;
+	}
 
 }

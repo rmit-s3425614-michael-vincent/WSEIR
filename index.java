@@ -23,7 +23,7 @@ import joptsimple.OptionSet;
 import util.doc;
 import util.frequency;
 import util.pointer;
-import util.stemmer;
+import util.Stemmer;
 
 public class index {
 
@@ -105,15 +105,15 @@ public class index {
 					List<String> txtlist = new ArrayList<>(Arrays
 							.asList(text.text().replaceAll("[^a-zA-Z\\s]", " ").toLowerCase().trim().split("\\s+")));
 							
-					docMap.get(id).setDocLength(hllist.size() + txtlist.size());
-					
 					hllist.removeAll(stopwords);
 					txtlist.removeAll(stopwords);
 					printList.addAll(hllist);
 					printList.addAll(txtlist);
 					
+					docMap.get(id).setDocLength(hllist.size() + txtlist.size());
+					
 					for (String hl : hllist) {
-						stemmer stem = new stemmer();
+						Stemmer stem = new Stemmer();
 						char[] ch = hl.toCharArray();
 						stem.add(ch, ch.length);
 						stem.stem();
@@ -127,14 +127,16 @@ public class index {
 								lexicon.get(hl).incDocsFreq();
 							}
 						} else {
-							pointer lx = new pointer();
-							lx.getInvIndex().put(id, new frequency());
-							lexicon.put(hl, lx);
+							lexicon.put(hl, new pointer() {
+								{
+									getInvIndex().put(id, new frequency());
+								}
+							});
 						}
 					}
 					
 					for (String txt : txtlist) {
-						stemmer stem = new stemmer();
+						Stemmer stem = new Stemmer();
 						char[] ch = txt.toCharArray();
 						stem.add(ch, ch.length);
 						stem.stem();
@@ -148,9 +150,11 @@ public class index {
 								lexicon.get(txt).incDocsFreq();
 							}
 						} else {
-							pointer lx = new pointer();
-							lx.getInvIndex().put(id, new frequency());
-							lexicon.put(txt, lx);
+							lexicon.put(txt, new pointer() {
+								{
+									getInvIndex().put(id, new frequency());
+								}
+							});
 						}
 					}
 					
