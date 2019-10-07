@@ -130,7 +130,6 @@ public class search {
 			while (mapRead.hasNextLine()) {
 				String[] in = mapRead.nextLine().split("::");
 				docMap.put(Integer.parseInt(in[2]), new doc(in[0], Integer.parseInt(in[1])));
-
 			}
 			mapRead.close();
 
@@ -149,6 +148,11 @@ public class search {
 
 			// minimum of 1 query term is needed
 			if (!queryList.isEmpty()) {
+				
+				StringJoiner sj = new StringJoiner(" ");
+				for (String query : queryList) {
+					sj.add(query);
+				}
 
 				// remove words in stoplist from query
 				queryList.removeAll(stopwords);
@@ -157,14 +161,10 @@ public class search {
 				Map<String, pointer> queryLexicon = new Hashtable<>();
 				List<List<Integer>> finalResults = new ArrayList<List<Integer>>();
 
-				StringJoiner sj = new StringJoiner(" ");
-
 				// parse through list for query
 				// use regex to remove punctuation and markup tags
 				// use stemmer to tokenise query words
 				for (String query : queryList) {
-
-					sj.add(query);
 
 					List<Integer> singleResults = new ArrayList<>();
 
@@ -175,7 +175,6 @@ public class search {
 					stem.stem();
 					token = stem.toString();
 
-					System.out.print(query + " ");
 					if (lexicon.containsKey(token)) {
 
 						int totalFreq = lexicon.get(token).getTotalFreq();
@@ -197,25 +196,20 @@ public class search {
 							docList[i] = index;
 						}
 
-						System.out.println(totalFreq + " " + docsFreq);
 						for (int i = 0; i < docList.length; i++) {
 							if ((i % 2) == 0) {
-								singleResults.add(docList[i]);
+								int id = docList[i];
+								singleResults.add(id);
 								int freq = docList[i + 1];
-								queryLexicon.get(token).getInvIndex().put(docList[i], new frequency() {
+								queryLexicon.get(token).getInvIndex().put(id, new frequency() {
 									{
 										setFreq(freq);
 									}
 								});
-								System.out.println(docMap.get(docList[i]).getDocNo() + " "
-										+ queryLexicon.get(token).getInvIndex().get(docList[i]).getFreq());
 							}
 						}
 
-					} else {
-						System.out.println(0 + " " + 0);
 					}
-					System.out.println();
 
 					finalResults.add(singleResults);
 
@@ -250,6 +244,7 @@ public class search {
 						}
 					}
 					
+					// custom comparator for comparing weight to order priority queue
 					Comparator<query> compare = new Comparator<query>() {
 
 						@Override
@@ -263,6 +258,7 @@ public class search {
 
 					};
 					
+					// priority queue data structure used for min heap
 					BoundedPriorityQueue<query> heap = new BoundedPriorityQueue<query>(compare, inputNumResults);
 					for (Integer id : accumulator.keySet()) {
 						query qr = new query(id, accumulator.get(id));
@@ -279,6 +275,53 @@ public class search {
 						count++;
 					}
 
+				}
+				
+				if (MMR == true) {
+					// TODO Implement MMR here
+					Map<Integer, Map<String, Integer>> fIndex = new Hashtable<>();
+					Set<Integer> queryResults = getCommonElements(finalResults);
+					
+					for(Integer id : queryResults) {
+						fIndex.put(id, new Hashtable<>());
+					}
+					
+					for(String token : lexicon.keySet()) {
+						
+						int docsFreq = lexicon.get(token).getDocsFreq();
+						int offset = lexicon.get(token).getOffset();
+						
+						// read "invlists" and jump pointer with seek
+						raf.seek(offset);
+						int[] docList = new int[docsFreq * 2];
+						for (int i = 0; i < docList.length; i++) {
+							int index = raf.readInt();
+							docList[i] = index;
+						}
+						
+						for (int i = 0; i < docList.length; i++) {
+							if ((i % 2) == 0) {
+								int id = docList[i];
+								int freq = docList[i + 1];
+								if (fIndex.containsKey(id)) {
+									fIndex.get(id).put(token, freq);
+								}
+							}
+						}
+						
+					}
+					
+					// for debugging forward index
+					System.out.println(sj.toString());
+					for(Integer id : queryResults) {
+						StringJoiner words = new StringJoiner(", ");
+						for (String token : fIndex.get(id).keySet()) {
+							String tokens = token + ":" + fIndex.get(id).get(token).toString();
+							words.add(tokens);
+						}
+						System.out.println(docMap.get(id).getDocNo() + " -> " + words.toString());
+					}
+					
 				}
 
 			} else {
