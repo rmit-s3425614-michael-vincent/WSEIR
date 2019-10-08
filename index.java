@@ -171,7 +171,7 @@ public class index {
 			mapFile.createNewFile();
 			PrintWriter mapOut = new PrintWriter(mapFile);
 			
-			// calculate weight of documents
+			// calculation for documents K value
 			int N = docMap.size();
 			int TL = 0;
 			for (Integer id : docMap.keySet()) {
@@ -185,7 +185,7 @@ public class index {
 				docK.put(id, K);
 			}
 			
-			// write document no and id to map file
+			// write document id, no, length and K to map file
 			StringJoiner map = new StringJoiner("\n");
 			for (Integer id : docMap.keySet()) {
 				String out = id + "::" + docMap.get(id).getDocNo() + "::" + docMap.get(id).getDocLength() + "::"

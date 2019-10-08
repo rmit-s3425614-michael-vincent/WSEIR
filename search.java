@@ -234,6 +234,8 @@ public class search {
 
 				}
 
+				// BM25 calculation is mandatory
+				// BM25 calculation results used for MMR calculation
 				if (BM25 == true) {
 
 					// map to accumulate weight result
@@ -274,7 +276,6 @@ public class search {
 						}
 						
 					} else {
-						// TODO Implement MMR here
 						
 						Map<Integer, List<Integer>> fIndex = new Hashtable<>();
 						Map<Integer, Map<Integer, Double>> similarity = new Hashtable<>();
@@ -309,6 +310,7 @@ public class search {
 							
 						}
 						
+						// calculate similarity between documents
 						for (Integer d1 : queryResults) {
 							similarity.put(d1, new Hashtable<>());
 							for (Integer d2 : queryResults) {
@@ -339,6 +341,7 @@ public class search {
 								BoundedPriorityQueue<query> heap = new BoundedPriorityQueue<query>(maxCmpr, 3);
 								for (Integer d1 : docMMR.keySet()) {
 									for (Integer d2 : similarity.get(d1).keySet()) {
+										// no need to check if d2 already in docMMR
 										if (!docMMR.containsKey(d2)) {
 											double MMR = calcMMR(accumulator.get(d2), similarity.get(d1).get(d2), 0.3);
 											query q = new query(d2, MMR);
@@ -352,6 +355,8 @@ public class search {
 							
 						}
 						
+						// ordering MMR results from highest to lowest
+						// higher MMR value means document is less similar but still relevant to query
 						BoundedPriorityQueue<query> MMR = new BoundedPriorityQueue<query>(maxCmpr, inputNumResults);
 						for (Integer id : docMMR.keySet()) {
 							query q = new query(id, docMMR.get(id));
