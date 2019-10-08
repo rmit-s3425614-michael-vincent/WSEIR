@@ -24,16 +24,31 @@ import util.Stemmer;
 
 public class search {
 
-	private static final String USAGE = "Usage is: search --<retrieval-function-1> [--<retrieval-function-2>] -q <query-label> -n <num-results> -l <lexicon> -i <invlists> -m <map> [-s <stoplist>] <queryterm-1> [<queryterm-2>... <queryterm-N>]";
+	private static final String USAGE = "Usage is: search --BM25 [--MMR] -q <query-label> -n <num-results> -l <lexicon> -i <invlists> -m <map> [-s <stoplist>] <queryterm-1> [<queryterm-2>... <queryterm-N>]";
 
 	// uses java library for data structure
 	private static Map<Integer, doc> docMap = new Hashtable<>(180000);
 	private static Map<String, pointer> lexicon = new Hashtable<>(230000);
+	private static Map<Integer, Double> docK = new Hashtable<>();
 	private static Set<String> stopwords = new HashSet<>();
 	private static List<String> queryList = new ArrayList<>();
 	private static boolean BM25 = false;
 	private static boolean MMR = false;
+	
+	// comparator to find max value
+	private static Comparator<query> maxCmpr = new Comparator<query>() {
 
+		@Override
+		public int compare(query o1, query o2) {
+			if (o1.getWeight() < o2.getWeight())
+				return -1;
+			if (o1.getWeight() > o2.getWeight())
+				return 1;
+			return 0;
+		}
+
+	};
+	
 	public static void main(String[] args) {
 
 		try {
@@ -62,10 +77,12 @@ public class search {
 			// option for specifying retrieval function to be used
 			if (options.has("BM25")) {
 				BM25 = true;
-			} else if (options.has("MMR")) {
-				MMR = true;
 			} else {
-				throw new Exception("Missing retrieval function to use");
+				throw new Exception("Missing BM25");
+			}
+			
+			if (options.has("MMR")) {
+				MMR = true;
 			}
 
 			// option for specifying query label
@@ -129,7 +146,9 @@ public class search {
 			Scanner mapRead = new Scanner(mapFile);
 			while (mapRead.hasNextLine()) {
 				String[] in = mapRead.nextLine().split("::");
-				docMap.put(Integer.parseInt(in[2]), new doc(in[0], Integer.parseInt(in[1])));
+				Integer id = Integer.parseInt(in[0]);
+				docMap.put(id, new doc(in[1], Integer.parseInt(in[2])));
+				docK.put(id, Double.parseDouble(in[3]));
 			}
 			mapRead.close();
 
@@ -218,21 +237,10 @@ public class search {
 				if (BM25 == true) {
 
 					// map to accumulate weight result
-					Map<Integer, Double> docK = new Hashtable<>();
 					Map<Integer, Double> accumulator = new Hashtable<>();
 					Set<Integer> queryResults = getCommonElements(finalResults);
 					int N = docMap.size();
-					int TL = 0;
-					for (Integer id : docMap.keySet()) {
-						int length = docMap.get(id).getDocLength();
-						TL += length;
-					}
-					double AL = TL / N;
-					for (Integer id : queryResults) {
-						int Ld = docMap.get(id).getDocLength();
-						double K = 1.2 * ((1 - 0.75) + ((0.75 * Ld) / AL));
-						docK.put(id, K);
-					}
+					
 					for (String lexicon : queryLexicon.keySet()) {
 						pointer pointer = queryLexicon.get(lexicon);
 						int ft = pointer.getDocsFreq();
@@ -244,86 +252,128 @@ public class search {
 						}
 					}
 					
-					// custom comparator for comparing weight to order priority queue
-					Comparator<query> compare = new Comparator<query>() {
-
-						@Override
-						public int compare(query o1, query o2) {
-							if (o1.getWeight() < o2.getWeight())
-								return -1;
-							if (o1.getWeight() > o2.getWeight())
-								return 1;
-							return 0;
+					if (MMR == false) {
+						
+						// priority queue data structure used for min heap
+						BoundedPriorityQueue<query> BM25 = new BoundedPriorityQueue<query>(maxCmpr, inputNumResults);
+						for (Integer id : accumulator.keySet()) {
+							query qr = new query(id, accumulator.get(id));
+							BM25.offer(qr);
 						}
+						
+						System.out.println();
+						System.out.println(sj.toString());
+						Iterator<query> queryItr = BM25.iterator();
+						int count = 1;
+						while (queryItr.hasNext()) {
+							query doc =  queryItr.next();
+							int id = doc.getId();
+							System.out.println(inputQueryLabel + " " + docMap.get(id).getDocNo() + " " + count + " "
+									+ doc.getWeight());
+							count++;
+						}
+						
+					} else {
+						// TODO Implement MMR here
+						
+						Map<Integer, List<Integer>> fIndex = new Hashtable<>();
+						Map<Integer, Map<Integer, Double>> similarity = new Hashtable<>();
+						Map<Integer, Double> docMMR = new Hashtable<>();
+						
+						for(Integer id : queryResults) {
+							fIndex.put(id, new ArrayList<>());
+						}
+						
+						for(String token : lexicon.keySet()) {
+							
+							int docsFreq = lexicon.get(token).getDocsFreq();
+							int offset = lexicon.get(token).getOffset();
+							
+							// read "invlists" and jump pointer with seek
+							raf.seek(offset);
+							int[] docList = new int[docsFreq * 2];
+							for (int i = 0; i < docList.length; i++) {
+								int index = raf.readInt();
+								docList[i] = index;
+							}
+							
+							for (int i = 0; i < docList.length; i++) {
+								if ((i % 2) == 0) {
+									int id = docList[i];
+									int freq = docList[i + 1];
+									if (fIndex.containsKey(id)) {
+										fIndex.get(id).add(freq);
+									}
+								}
+							}
+							
+						}
+						
+						for (Integer d1 : queryResults) {
+							similarity.put(d1, new Hashtable<>());
+							for (Integer d2 : queryResults) {
+								List<Integer> df1 = fIndex.get(d1);
+								List<Integer> df2 = fIndex.get(d2);
+								double cosSim = cosineSimilarity(df1, df2);
+								similarity.get(d1).put(d2, cosSim);
+							}
+						}
+						
+						// queryHeap contains query similarity results for all documents
+						// ordered with the most relevant on top
+						BoundedPriorityQueue<query> queryHeap = new BoundedPriorityQueue<query>(maxCmpr, 3);
+						for (Integer id : accumulator.keySet()) {
+							query qr = new query(id, accumulator.get(id));
+							queryHeap.offer(qr);
+						}
+						
+						// make sure that MMR for all items are calculated
+						while (!docMMR.keySet().containsAll(queryResults)) {
 
-					};
-					
-					// priority queue data structure used for min heap
-					BoundedPriorityQueue<query> heap = new BoundedPriorityQueue<query>(compare, inputNumResults);
-					for (Integer id : accumulator.keySet()) {
-						query qr = new query(id, accumulator.get(id));
-						heap.offer(qr);
-					}
-					
-					System.out.println(sj.toString());
-					Iterator<query> itr = heap.iterator();
-					int count = 1;
-					while (itr.hasNext()) {
-						int id = itr.next().getId();
-						System.out.println(inputQueryLabel + " " + docMap.get(id).getDocNo() + " " + count + " "
-								+ accumulator.get(id));
-						count++;
+							// docMMR is empty on first loop
+							// put item most relevant to query to docMMR
+							if (docMMR.isEmpty()) {
+								query init = queryHeap.peek();
+								docMMR.put(init.getId(), init.getWeight());
+							} else { // check similarity of items in docMMR with other documents for the next item
+								BoundedPriorityQueue<query> heap = new BoundedPriorityQueue<query>(maxCmpr, 3);
+								for (Integer d1 : docMMR.keySet()) {
+									for (Integer d2 : similarity.get(d1).keySet()) {
+										if (!docMMR.containsKey(d2)) {
+											double MMR = calcMMR(accumulator.get(d2), similarity.get(d1).get(d2), 0.3);
+											query q = new query(d2, MMR);
+											heap.offer(q);
+										} 
+									}
+								}
+								query d = heap.peek();
+								docMMR.put(d.getId(), d.getWeight());	
+							}
+							
+						}
+						
+						BoundedPriorityQueue<query> MMR = new BoundedPriorityQueue<query>(maxCmpr, inputNumResults);
+						for (Integer id : docMMR.keySet()) {
+							query q = new query(id, docMMR.get(id));
+							MMR.offer(q);
+						}
+						
+						System.out.println();
+						System.out.println(sj.toString());
+						Iterator<query> queryItr = MMR.iterator();
+						int count = 1;
+						while (queryItr.hasNext()) {
+							query doc =  queryItr.next();
+							int id = doc.getId();
+							System.out.println(inputQueryLabel + " " + docMap.get(id).getDocNo() + " " + count + " "
+									+ doc.getWeight());
+							count++;
+						}
+						
 					}
 
 				}
 				
-				if (MMR == true) {
-					// TODO Implement MMR here
-					Map<Integer, Map<String, Integer>> fIndex = new Hashtable<>();
-					Set<Integer> queryResults = getCommonElements(finalResults);
-					
-					for(Integer id : queryResults) {
-						fIndex.put(id, new Hashtable<>());
-					}
-					
-					for(String token : lexicon.keySet()) {
-						
-						int docsFreq = lexicon.get(token).getDocsFreq();
-						int offset = lexicon.get(token).getOffset();
-						
-						// read "invlists" and jump pointer with seek
-						raf.seek(offset);
-						int[] docList = new int[docsFreq * 2];
-						for (int i = 0; i < docList.length; i++) {
-							int index = raf.readInt();
-							docList[i] = index;
-						}
-						
-						for (int i = 0; i < docList.length; i++) {
-							if ((i % 2) == 0) {
-								int id = docList[i];
-								int freq = docList[i + 1];
-								if (fIndex.containsKey(id)) {
-									fIndex.get(id).put(token, freq);
-								}
-							}
-						}
-						
-					}
-					
-					// for debugging forward index
-					System.out.println(sj.toString());
-					for(Integer id : queryResults) {
-						StringJoiner words = new StringJoiner(", ");
-						for (String token : fIndex.get(id).keySet()) {
-							String tokens = token + ":" + fIndex.get(id).get(token).toString();
-							words.add(tokens);
-						}
-						System.out.println(docMap.get(id).getDocNo() + " -> " + words.toString());
-					}
-					
-				}
-
 			} else {
 				System.err.println("No query term entered.");
 				System.err.println(USAGE);
@@ -333,7 +383,8 @@ public class search {
 
 			long endTime = System.nanoTime();
 
-			System.out.print("Time taken = " + ((double) (endTime - startTime)) / Math.pow(10, 6) + " ms");
+			System.out.println("Time taken = " + ((double) (endTime - startTime)) / Math.pow(10, 6) + " ms");
+			System.out.println();
 
 		} catch (Exception ex) {
 			System.err.println(ex);
@@ -355,4 +406,33 @@ public class search {
 		return common;
 	}
 
+	// cosine similarity for calculating if two documents are similar
+	public static double cosineSimilarity(List<Integer> vectorOne, List<Integer> vectorTwo) {
+
+	    double dotProduct = 0.0;
+	    double normVecA = 0.0;
+	    double normVecB = 0.0;
+	    
+	    if (vectorOne.size() <= vectorTwo.size()) {
+	    	for(int i = 0; i < vectorOne.size(); i++) {
+		        dotProduct += vectorOne.get(i) * vectorTwo.get(i);
+		        normVecA += Math.pow(vectorOne.get(i), 2);
+		        normVecB += Math.pow(vectorTwo.get(i), 2);
+		    }
+	    } else {
+	    	for(int i = 0; i < vectorTwo.size(); i++) {
+		        dotProduct += vectorOne.get(i) * vectorTwo.get(i);
+		        normVecA += Math.pow(vectorOne.get(i), 2);
+		        normVecB += Math.pow(vectorTwo.get(i), 2);
+		    }
+	    }
+
+	    return dotProduct / (Math.sqrt(normVecA) * Math.sqrt(normVecB));
+
+	}
+	
+	public static double calcMMR(double querySim, double docSim, double lambda) {
+		return (lambda * querySim) - ((1 - lambda) * docSim);
+	}
+	
 }

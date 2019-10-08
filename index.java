@@ -33,6 +33,7 @@ public class index {
 	private static Set<String> printList = new HashSet<>();
 	private static Map<Integer, doc> docMap = new Hashtable<>(180000);
 	private static Map<String, pointer> lexicon = new Hashtable<>(230000);
+	private static Map<Integer, Double> docK = new Hashtable<>();
 	private static Set<String> stopwords = new HashSet<>();
 
 	public static void main(String[] args) {
@@ -170,10 +171,25 @@ public class index {
 			mapFile.createNewFile();
 			PrintWriter mapOut = new PrintWriter(mapFile);
 			
+			// calculate weight of documents
+			int N = docMap.size();
+			int TL = 0;
+			for (Integer id : docMap.keySet()) {
+				int length = docMap.get(id).getDocLength();
+				TL += length;
+			}
+			double AL = TL / N;
+			for (Integer id : docMap.keySet()) {
+				int Ld = docMap.get(id).getDocLength();
+				double K = 1.2 * ((1 - 0.75) + ((0.75 * Ld) / AL));
+				docK.put(id, K);
+			}
+			
 			// write document no and id to map file
 			StringJoiner map = new StringJoiner("\n");
 			for (Integer id : docMap.keySet()) {
-				String out = docMap.get(id).getDocNo() + "::" + docMap.get(id).getDocLength() + "::" + id;
+				String out = id + "::" + docMap.get(id).getDocNo() + "::" + docMap.get(id).getDocLength() + "::"
+						+ docK.get(id).toString();
 				map.add(out);
 			}
 			mapOut.write(map.toString());
