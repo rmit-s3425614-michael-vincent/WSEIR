@@ -265,10 +265,9 @@ public class search {
 						
 						System.out.println();
 						System.out.println(sj.toString());
-						Iterator<query> queryItr = BM25.iterator();
 						int count = 1;
-						while (queryItr.hasNext()) {
-							query doc =  queryItr.next();
+						while (!BM25.isEmpty()) {
+							query doc = BM25.poll();
 							int id = doc.getId();
 							System.out.println(inputQueryLabel + " " + docMap.get(id).getDocNo() + " " + count + " "
 									+ doc.getWeight());
@@ -341,7 +340,7 @@ public class search {
 								BoundedPriorityQueue<query> heap = new BoundedPriorityQueue<query>(maxCmpr, 3);
 								for (Integer d1 : docMMR.keySet()) {
 									for (Integer d2 : similarity.get(d1).keySet()) {
-										// no need to check if d2 already in docMMR
+										// no need to calculate d1-d2 MMR if d2 already in docMMR
 										if (!docMMR.containsKey(d2)) {
 											double MMR = calcMMR(accumulator.get(d2), similarity.get(d1).get(d2), 0.3);
 											query q = new query(d2, MMR);
@@ -365,10 +364,9 @@ public class search {
 						
 						System.out.println();
 						System.out.println(sj.toString());
-						Iterator<query> queryItr = MMR.iterator();
 						int count = 1;
-						while (queryItr.hasNext()) {
-							query doc =  queryItr.next();
+						while (!MMR.isEmpty()) {
+							query doc = MMR.poll();
 							int id = doc.getId();
 							System.out.println(inputQueryLabel + " " + docMap.get(id).getDocNo() + " " + count + " "
 									+ doc.getWeight());
