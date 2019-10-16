@@ -24,3 +24,5 @@ hs_err_pid*
 /invlists
 /lexicon
 /map
+/implementation-details.txt
+/sample-run.txt
